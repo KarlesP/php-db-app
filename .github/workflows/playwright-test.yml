@@ -1,0 +1,31 @@
+name: Playwright Tests
+
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: ["Deploy to AWS"]
+    types:
+      - completed
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout tests
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: Install dependencies
+        working-directory: ./tests
+        run: npm ci
+
+      - name: Run Playwright tests
+        working-directory: ./tests
+        env:
+          BASE_URL: ${{ secrets.APP_URL }}
+        run: npm run test
