@@ -19,17 +19,41 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Configure kubectl (for EKS)
+      - name: Deploy to ECS
+        env:
+          CLUSTER_NAME: ${{ secrets.CLUSTER_NAME }}           # ECS cluster name from your setup
+          SERVICE_NAME: ${{ secrets.SERVICE_NAME }}          # ECS service name (you can adjust accordingly)
+          CONTAINER_NAME: ${{ secrets.CONTAINER_NAME }}                 # Container name in task definition
+          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}  # ECR repo from secrets
+          IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}
         run: |
-          aws eks --region ${{ secrets.AWS_REGION }} update-kubeconfig --name your-eks-cluster-name
+          echo "Updating ECS service with new image..."
 
-      - name: Deploy to EKS
-        run: |
-          # Get image tag from previous workflow (or pass manually on dispatch)
-          IMAGE_TAG=${{ github.event.workflow_run.head_sha }}
+          # Fetch current task definition JSON
+          TASK_DEF_JSON=$(aws ecs describe-task-definition --task-definition $SERVICE_NAME)
 
-          # Update K8s deployment image and rollout
-          kubectl set image deployment/php-app php-container=${{ secrets.ECR_REPOSITORY }}:$IMAGE_TAG
-          kubectl rollout status deployment/php-app
+          # Update container image in the task definition
+          NEW_TASK_DEF=$(echo $TASK_DEF_JSON | jq --arg IMAGE "$ECR_REPOSITORY:$IMAGE_TAG" '
+            .taskDefinition.containerDefinitions[] |=
+              if .name == "'"$CONTAINER_NAME"'" then .image = $IMAGE else . end |
+            {
+              family: .taskDefinition.family,
+              taskRoleArn: .taskDefinition.taskRoleArn,
+              executionRoleArn: .taskDefinition.executionRoleArn,
+              networkMode: .taskDefinition.networkMode,
+              containerDefinitions: .taskDefinition.containerDefinitions,
+              requiresCompatibilities: .taskDefinition.requiresCompatibilities,
+              cpu: .taskDefinition.cpu,
+              memory: .taskDefinition.memory
+            }
+          ')
 
-      # Optional: For EC2 deployment, add your deployment script here
+          # Register new task definition revision
+          NEW_TASK_DEF_ARN=$(aws ecs register-task-definition --cli-input-json "$NEW_TASK_DEF" --query 'taskDefinition.taskDefinitionArn' --output text)
+
+          echo "New task definition registered: $NEW_TASK_DEF_ARN"
+
+          # Update ECS service to use the new task definition
+          aws ecs update-service --cluster $CLUSTER_NAME --service $SERVICE_NAME --task-definition $NEW_TASK_DEF_ARN
+
+          echo "Service updated successfully."
