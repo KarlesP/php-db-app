@@ -1,4 +1,4 @@
-name: Deploy to AWS EKS
+name: Build and push AWS ECR
 
 on:
   push:

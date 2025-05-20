@@ -1,5 +1,10 @@
+name: Test to AWS ECR Connection
+
+on:
+  workflow_dispatch:
+
 jobs:
-  deploy:
+  test-connection:
     runs-on: ubuntu-latest
     permissions:
       id-token: write     # needed for OIDC
@@ -10,10 +15,10 @@ jobs:
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
-          role-to-assume: arn:aws:iam:: ${{ secrets.AWS_user }}:role/GitHubActionsDeployRole
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_USER }}:role/GitHubActionsDeployRole
           aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Login to ECR
         run: |
           aws ecr get-login-password | docker login --username AWS \
-            --password-stdin ${{ secrets.AWS_user }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
+            --password-stdin ${{ secrets.AWS_USER }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
