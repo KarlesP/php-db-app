@@ -10,10 +10,10 @@ jobs:
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
-          role-to-assume: arn:aws:iam::598862766378:role/GitHubActionsDeployRole
-          aws-region: us-east-1
+          role-to-assume: arn:aws:iam:: ${{ secrets.AWS_user }}:role/GitHubActionsDeployRole
+          aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Login to ECR
         run: |
           aws ecr get-login-password | docker login --username AWS \
-            --password-stdin 598862766378.dkr.ecr.us-east-1.amazonaws.com
+            --password-stdin ${{ secrets.AWS_user }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
