@@ -93,7 +93,6 @@ The PHP app uses environment variables to connect to the database, and handles:
 
 * Connection errors
 * Query errors
-* Escaping output (`htmlspecialchars`)
 
 ---
 
@@ -105,18 +104,3 @@ docker-compose down -v
 
 This stops containers and deletes the volume (database).
 
----
-
-## 🧑‍💻 Author
-
-**Panagiotis Karles**
-Senior DevOps Engineer
-[LinkedIn →](https://linkedin.com/in/pkarles)
-
----
-
-## 📄 License
-
-MIT (or your preferred license)
-
-```
