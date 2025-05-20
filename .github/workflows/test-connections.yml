@@ -1,0 +1,24 @@
+name: Deploy to AWS
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write     # needed for OIDC
+      contents: read
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_USER }}:role/GitHubActionsDeployRole
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to ECR
+        run: |
+          aws ecr get-login-password | docker login --username AWS \
+            --password-stdin ${{ secrets.AWS_USER }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com

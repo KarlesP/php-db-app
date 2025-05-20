@@ -1,0 +1,10 @@
+{
+  "scripts": {
+    "test": "npx playwright test",
+    "test:local": "dotenv -e ../.env -- npx playwright test",
+    "test:cloud": "npx playwright test --project=cloud"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.52.0"
+  }
+}
