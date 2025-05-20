@@ -1,9 +1,8 @@
 name: Build and push AWS ECR
 
+
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
 
 env:
   IMAGE_TAG: ${{ github.sha }}
