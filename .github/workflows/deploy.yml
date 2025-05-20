@@ -21,18 +21,24 @@ jobs:
 
       - name: Deploy to ECS
         env:
-          CLUSTER_NAME: ${{ secrets.CLUSTER_NAME }}           # ECS cluster name from your setup
-          SERVICE_NAME: ${{ secrets.SERVICE_NAME }}          # ECS service name (you can adjust accordingly)
-          CONTAINER_NAME: ${{ secrets.CONTAINER_NAME }}                 # Container name in task definition
-          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}  # ECR repo from secrets
-          IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}
+          CLUSTER_NAME: php-ecs-cluster
+          SERVICE_NAME: php-ecs-service
+          TASK_DEFINITION_FAMILY: php-app-task
+          CONTAINER_NAME: php-app
+          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+          IMAGE_TAG: ${{ github.event.inputs.image_tag || github.event.workflow_run.head_sha || 'latest' }}
         run: |
-          echo "Updating ECS service with new image..."
+          echo "Using IMAGE_TAG=$IMAGE_TAG"
 
-          # Fetch current task definition JSON
-          TASK_DEF_JSON=$(aws ecs describe-task-definition --task-definition $SERVICE_NAME)
+          if [ -z "$IMAGE_TAG" ]; then
+            echo "Error: IMAGE_TAG is empty"
+            exit 1
+          fi
 
-          # Update container image in the task definition
+          echo "Fetching current task definition..."
+          TASK_DEF_JSON=$(aws ecs describe-task-definition --task-definition $TASK_DEFINITION_FAMILY)
+
+          echo "Updating container image to $ECR_REPOSITORY:$IMAGE_TAG"
           NEW_TASK_DEF=$(echo $TASK_DEF_JSON | jq --arg IMAGE "$ECR_REPOSITORY:$IMAGE_TAG" '
             .taskDefinition.containerDefinitions[] |=
               if .name == "'"$CONTAINER_NAME"'" then .image = $IMAGE else . end |
@@ -48,12 +54,12 @@ jobs:
             }
           ')
 
-          # Register new task definition revision
+          echo "Registering new task definition revision..."
           NEW_TASK_DEF_ARN=$(aws ecs register-task-definition --cli-input-json "$NEW_TASK_DEF" --query 'taskDefinition.taskDefinitionArn' --output text)
 
           echo "New task definition registered: $NEW_TASK_DEF_ARN"
 
-          # Update ECS service to use the new task definition
+          echo "Updating ECS service to use new task definition..."
           aws ecs update-service --cluster $CLUSTER_NAME --service $SERVICE_NAME --task-definition $NEW_TASK_DEF_ARN
 
-          echo "Service updated successfully."
+          echo "Deployment completed."
