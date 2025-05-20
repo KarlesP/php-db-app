@@ -1,0 +1,34 @@
+services:
+  app:
+    build:
+      context: docker/php
+    container_name: php-app
+    ports:
+      - "8888:8080"
+    expose:
+      - "8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080"]
+      interval: 5s
+      timeout: 2s
+      retries: 10
+    env_file: .env
+    depends_on:
+      - db
+
+  db:
+    image: mysql:8.0
+    container_name: mysql-db
+    restart: always
+    env_file:
+      - .env
+    environment:
+      MYSQL_ROOT_PASSWORD: ${ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASS}
+    volumes:
+      - ./docker/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "3306:3306"
+
