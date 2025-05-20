@@ -31,11 +31,11 @@ jobs:
           ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
         run: |
           set -euo pipefail
-          echo "Deriving image tag from commit SHA..."
+          echo "🔍 Deriving image tag from commit SHA..."
           IMAGE_TAG=$(echo $GITHUB_SHA | cut -c1-7)
           echo "IMAGE_TAG=$IMAGE_TAG"
 
-          echo "Looking up latest task definition ARN for family $TASK_DEFINITION_FAMILY..."
+          echo "🔍 Looking up latest task definition ARN for family $TASK_DEFINITION_FAMILY..."
           LATEST_ARN=$(aws ecs list-task-definitions \
             --family-prefix "$TASK_DEFINITION_FAMILY" \
             --sort DESC \
@@ -43,18 +43,21 @@ jobs:
             --query 'taskDefinitionArns[0]' \
             --output text)
 
-          if [ -z "$LATEST_ARN" ]; then
-            echo "Error: No existing task definition found for family $TASK_DEFINITION_FAMILY"
+          echo "LATEST_ARN=$LATEST_ARN"
+
+          if [ "$LATEST_ARN" = "None" ] || [ -z "$LATEST_ARN" ]; then
+            echo "❌ Error: No valid task definition found for family $TASK_DEFINITION_FAMILY"
             exit 1
           fi
-          echo "Found latest task definition ARN: $LATEST_ARN"
 
-          echo "Describing task definition..."
+          echo "✅ Found latest task definition ARN: $LATEST_ARN"
+
+          echo "🔍 Describing task definition..."
           TASK_DEF_JSON=$(aws ecs describe-task-definition \
             --task-definition "$LATEST_ARN" \
             --output json)
 
-          echo "Patching container '$CONTAINER_NAME' image to $ECR_REPOSITORY:$IMAGE_TAG..."
+          echo "📦 Patching container '$CONTAINER_NAME' image to $ECR_REPOSITORY:$IMAGE_TAG..."
           NEW_TASK_DEF=$(echo "$TASK_DEF_JSON" | jq --arg IMAGE "$ECR_REPOSITORY:$IMAGE_TAG" --arg NAME "$CONTAINER_NAME" '
             .taskDefinition.containerDefinitions |= map(
               if .name == $NAME then .image = $IMAGE else . end
@@ -71,19 +74,19 @@ jobs:
             }
           ')
 
-          echo "Registering new task definition revision..."
+          echo "🚀 Registering new task definition revision..."
           NEW_ARN=$(aws ecs register-task-definition \
             --cli-input-json "$NEW_TASK_DEF" \
             --query 'taskDefinition.taskDefinitionArn' \
             --output text)
 
-          echo "New task definition ARN: $NEW_ARN"
+          echo "✅ New task definition ARN: $NEW_ARN"
 
-          echo "Updating ECS service ($SERVICE_NAME) on cluster ($CLUSTER_NAME)..."
+          echo "🔄 Updating ECS service ($SERVICE_NAME) on cluster ($CLUSTER_NAME)..."
           aws ecs update-service \
             --cluster "$CLUSTER_NAME" \
             --service "$SERVICE_NAME" \
             --task-definition "$NEW_ARN" \
             --force-new-deployment
 
-          echo "✅ Deployment complete, service is rolling out $NEW_ARN"
+          echo "🎉 Deployment complete, service is rolling out $NEW_ARN"
