@@ -20,7 +20,8 @@ jobs:
 
       - name: Build Docker image
         run: |
-          docker build -t ${{ secrets.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }} -f docker/php/Dockerfile docker/php
+          ls
+          docker build -t ${{ secrets.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }} -f ./docker/php/Dockerfile docker/php
 
       - name: Push Docker image to ECR
         run: |
