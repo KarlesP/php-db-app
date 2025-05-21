@@ -21,6 +21,8 @@ jobs:
 
       - name: Build Docker image
         run: |
+          cd {{ github.workspace }}
+          ls
           docker build -t ${{ secrets.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }} -f ${{ github.workspace }}/docker/php/Dockerfile ${{ github.workspace }}
 
       - name: Push Docker image to ECR
