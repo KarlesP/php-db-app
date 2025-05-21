@@ -21,17 +21,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         
-      - name: Debug workspace
-        run: |
-          echo "Checking workspace contents..."
-          ls -R ${{ github.workspace }}
-          
+         
       - name: Build Docker image
         run: |
-          ls
-          cd ${{ github.workspace }}
-          ls
-          docker build -t ${{ secrets.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }} -f ${{ github.workspace }}/docker/php/Dockerfile ${{ github.workspace }}
+          ${{ github.workspace }}/docker/php
+          docker build -t ${{ secrets.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }} .
 
       - name: Push Docker image to ECR
         run: |
