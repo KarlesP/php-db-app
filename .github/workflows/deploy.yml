@@ -18,8 +18,10 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: List dirs 
-        run: ls ${{ github.workspace }}
+      - name: Debug workspace
+        run: |
+          echo "Checking workspace contents..."
+          ls -R ${{ github.workspace }}
           
       - name: Build Docker image
         run: |
