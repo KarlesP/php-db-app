@@ -29,6 +29,23 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y mysql-client
+
+      - name: Get public IP of runner
+        id: ip
+        run: |
+          echo "IP=$(curl -s https://checkip.amazonaws.com)" >> $GITHUB_ENV
+
+      - name: Allow temporary MySQL access from runner IP
+        run: |
+          echo "Authorizing $IP for MySQL access..."
+          aws ec2 authorize-security-group-ingress \
+            --group-id ${{ secrets.RDS_SECURITY_GROUP_ID }} \
+            --protocol tcp \
+            --port 3306 \
+            --cidr $IP/32 \
+            --description "Temporary GitHub Actions access"
+
+
       - name: Make RDS publicly accessible (temporarily)
         run: |
           aws rds modify-db-instance \
@@ -51,9 +68,12 @@ jobs:
           echo "Connecting to $DB_HOST..."
           mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASS" < ${{ github.workspace }}/docker/mysql/init.sql
 
-      - name: Make RDS private again
+      - name: Revoke MySQL access after job
+        if: always()
         run: |
-          aws rds modify-db-instance \
-            --db-instance-identifier ${{ secrets.DB_IDENTIFIER }} \
-            --no-publicly-accessible \
-            --apply-immediately
+          echo "Revoking access for $IP..."
+          aws ec2 revoke-security-group-ingress \
+            --group-id ${{ secrets.RDS_SECURITY_GROUP_ID }} \
+            --protocol tcp \
+            --port 3306 \
+            --cidr $IP/32
