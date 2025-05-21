@@ -1,0 +1,41 @@
+name: Build and Push to AWS
+
+on:
+  workflow_dispatch:
+
+env:
+  IMAGE_TAG: ${{ github.sha }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Install MySQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mysql-client
+
+      - name: Run init.sql on RDS
+        env:
+          DB_HOST: ${{ secrets.RDS_HOST }}
+          DB_PORT: ${{ secrets.RDS_PORT }}
+          DB_USER: ${{ secrets.RDS_USER }}
+          DB_PASS: ${{ secrets.RDS_PASSWORD }}
+        run: |
+          echo "Connecting to $DB_HOST..."
+          mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASS" < ${{ github.workspace }}/docker/mysql/init.sql

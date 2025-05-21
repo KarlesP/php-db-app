@@ -76,12 +76,14 @@ Resources:
     Properties:
       VpcId: !Ref AppVPC
       CidrBlock: !Ref PublicSubnet1Cidr
+      AvailabilityZone: us-east-1a
       MapPublicIpOnLaunch: true
   PublicSubnet2:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref AppVPC
       CidrBlock: !Ref PublicSubnet2Cidr
+      AvailabilityZone: us-east-1b
       MapPublicIpOnLaunch: true
   Subnet1RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
