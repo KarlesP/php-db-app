@@ -1,4 +1,4 @@
-name: Build and Push to AWS
+name: Deploy Database
 
 on:
   workflow_dispatch:
@@ -13,7 +13,7 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
@@ -29,6 +29,17 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y mysql-client
+      - name: Make RDS publicly accessible (temporarily)
+        run: |
+          aws rds modify-db-instance \
+            --db-instance-identifier ${{ secrets.DB_IDENTIFIER }} \
+            --publicly-accessible \
+            --apply-immediately
+
+      - name: Wait for DB to become available
+        run: |
+          aws rds wait db-instance-available \
+            --db-instance-identifier ${{ secrets.DB_IDENTIFIER }}
 
       - name: Run init.sql on RDS
         env:
@@ -39,3 +50,10 @@ jobs:
         run: |
           echo "Connecting to $DB_HOST..."
           mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASS" < ${{ github.workspace }}/docker/mysql/init.sql
+
+      - name: Make RDS private again
+        run: |
+          aws rds modify-db-instance \
+            --db-instance-identifier ${{ secrets.DB_IDENTIFIER }} \
+            --no-publicly-accessible \
+            --apply-immediately
