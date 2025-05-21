@@ -1,0 +1,78 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Root StackSet to deploy PHP ECS infra to multiple AWS regions (eu-west-1, eu-central-1)
+  
+Parameters:
+  ApplicationName:
+    Type: String
+    Default: php-app
+  ECRRepoName:
+    Type: String
+    Default: php-app-repo
+  ImageTag:
+    Type: String
+    Default: latest
+  DBName:
+    Type: String
+    Default: mydb
+  DBUser:
+    Type: String
+    Default: admin
+  DBPassword:
+    Type: String
+    NoEcho: true
+
+Resources:
+
+  # --------------------------------------------------------
+  # 1) Administration role that CloudFormation StackSets uses
+  # --------------------------------------------------------
+  StackSetAdminRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ApplicationName}-StackSetAdminRole"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudformation.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess
+
+  # ----------------------------------------------------------------
+  # 2) The StackSet itself, pointing at your ECS template stored in S3
+  # ----------------------------------------------------------------
+  MultiRegionECS:
+    Type: AWS::CloudFormation::StackSet
+    Properties:
+      StackSetName: !Sub "${ApplicationName}-MultiRegionECS"
+      PermissionModel: SERVICE_MANAGED
+      AdministrationRoleARN: !GetAtt StackSetAdminRole.Arn
+      ExecutionRoleName: AWSCloudFormationStackSetExecutionRole
+      AutoDeployment:
+        Enabled: true
+        RetainStacksOnAccountRemoval: false
+      Regions:
+        - eu-west-1
+        - eu-central-1
+      TemplateURL: https://your‑bucket.s3.amazonaws.com/ecs-stack.yaml
+      Parameters:
+        - ParameterKey: ApplicationName
+          ParameterValue: !Ref ApplicationName
+        - ParameterKey: ECRRepoName
+          ParameterValue: !Ref ECRRepoName
+        - ParameterKey: ImageTag
+          ParameterValue: !Ref ImageTag
+        - ParameterKey: DBName
+          ParameterValue: !Ref DBName
+        - ParameterKey: DBUser
+          ParameterValue: !Ref DBUser
+        - ParameterKey: DBPassword
+          ParameterValue: !Ref DBPassword
+
+Outputs:
+  StackSetId:
+    Description: The ARN of the created StackSet
+    Value: !Ref MultiRegionECS
