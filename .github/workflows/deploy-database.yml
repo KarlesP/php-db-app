@@ -43,7 +43,7 @@ jobs:
             --protocol tcp \
             --port 3306 \
             --cidr $IP/32 
-            
+
       - name: Make RDS publicly accessible (temporarily)
         run: |
           aws rds modify-db-instance \
@@ -57,14 +57,9 @@ jobs:
             --db-instance-identifier ${{ secrets.DB_IDENTIFIER }}
 
       - name: Run init.sql on RDS
-        env:
-          DB_HOST: ${{ secrets.RDS_HOST }}
-          DB_PORT: ${{ secrets.RDS_PORT }}
-          DB_USER: ${{ secrets.RDS_USER }}
-          DB_PASS: ${{ secrets.RDS_PASSWORD }}
         run: |
           echo "Connecting to $DB_HOST..."
-          mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASS" < ${{ github.workspace }}/docker/mysql/init.sql
+          mysql -h ${{ secrets.RDS_HOST }} -P ${{ secrets.RDS_PORT }} -u ${{ secrets.RDS_USER }} -p${{ secrets.RDS_PASSWORD }} < ${{ github.workspace }}/docker/mysql/init.sql
 
       - name: Revoke MySQL access after job
         if: always()
