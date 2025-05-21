@@ -20,9 +20,9 @@ jobs:
 
       - name: Debug paths
         run: |
-          echo "Current directory: $(pwd)"
+          echo "Current directory: $GITHUB_WORKSPACE"
           echo "Files in current directory:"
-          ls -la
+          ls $GITHUB_WORKSPACE
           echo "Files in docker/php directory:"
           ls -la docker/php
 
