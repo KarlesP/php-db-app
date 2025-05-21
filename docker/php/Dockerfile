@@ -4,7 +4,7 @@ FROM php:8.1-alpine
 RUN docker-php-ext-install mysqli
 
 WORKDIR /var/www/html
-COPY src/ .
+COPY ${{ github.workspace }}/src/ .
 
 EXPOSE 8080
 
