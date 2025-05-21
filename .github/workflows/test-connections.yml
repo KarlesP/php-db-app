@@ -1,5 +1,6 @@
 name: Test to AWS ECR Connection
 
+
 on:
   workflow_dispatch:
 
@@ -22,3 +23,4 @@ jobs:
         run: |
           aws ecr get-login-password | docker login --username AWS \
             --password-stdin ${{ secrets.AWS_USER }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
+
