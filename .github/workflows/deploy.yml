@@ -1,11 +1,10 @@
-name: Deploy to AWS
+name: Build and Push to AWS
 
 on:
   workflow_dispatch:
-  workflow_run:
-    workflows: ["Build and Push Docker Image"]
-    types:
-      - completed
+
+env:
+  IMAGE_TAG: ${{ github.sha }}
 
 jobs:
   deploy:
@@ -19,74 +18,10 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Deploy to ECS
-        env:
-          AWS_REGION: ${{ secrets.AWS_REGION }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          CLUSTER_NAME: php-ecs-cluster
-          SERVICE_NAME: php-ecs-service
-          TASK_DEFINITION_FAMILY: php-app-task
-          CONTAINER_NAME: php-app
-          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+      - name: Build Docker image
         run: |
-          set -euo pipefail
-          echo "🔍 Deriving image tag from commit SHA..."
-          IMAGE_TAG=$(echo $GITHUB_SHA | cut -c1-7)
-          echo "IMAGE_TAG=$IMAGE_TAG"
+          docker build -t ${{ secrets.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }} -f docker/php/Dockerfile docker/php
 
-          echo "🔍 Looking up latest task definition ARN for family $TASK_DEFINITION_FAMILY..."
-          LATEST_ARN=$(aws ecs list-task-definitions \
-            --family-prefix "$TASK_DEFINITION_FAMILY" \
-            --sort DESC \
-            --max-items 1 \
-            --query 'taskDefinitionArns[0]' \
-            --output text)
-
-          echo "LATEST_ARN=$LATEST_ARN"
-
-          if [ "$LATEST_ARN" = "None" ] || [ -z "$LATEST_ARN" ]; then
-            echo "❌ Error: No valid task definition found for family $TASK_DEFINITION_FAMILY"
-            exit 1
-          fi
-
-          echo "✅ Found latest task definition ARN: $LATEST_ARN"
-
-          echo "🔍 Describing task definition..."
-          TASK_DEF_JSON=$(aws ecs describe-task-definition \
-            --task-definition "$LATEST_ARN" \
-            --output json)
-
-          echo "📦 Patching container '$CONTAINER_NAME' image to $ECR_REPOSITORY:$IMAGE_TAG..."
-          NEW_TASK_DEF=$(echo "$TASK_DEF_JSON" | jq --arg IMAGE "$ECR_REPOSITORY:$IMAGE_TAG" --arg NAME "$CONTAINER_NAME" '
-            .taskDefinition.containerDefinitions |= map(
-              if .name == $NAME then .image = $IMAGE else . end
-            ) |
-            {
-              family: .taskDefinition.family,
-              taskRoleArn: .taskDefinition.taskRoleArn,
-              executionRoleArn: .taskDefinition.executionRoleArn,
-              networkMode: .taskDefinition.networkMode,
-              containerDefinitions: .taskDefinition.containerDefinitions,
-              requiresCompatibilities: .taskDefinition.requiresCompatibilities,
-              cpu: .taskDefinition.cpu,
-              memory: .taskDefinition.memory
-            }
-          ')
-
-          echo "🚀 Registering new task definition revision..."
-          NEW_ARN=$(aws ecs register-task-definition \
-            --cli-input-json "$NEW_TASK_DEF" \
-            --query 'taskDefinition.taskDefinitionArn' \
-            --output text)
-
-          echo "✅ New task definition ARN: $NEW_ARN"
-
-          echo "🔄 Updating ECS service ($SERVICE_NAME) on cluster ($CLUSTER_NAME)..."
-          aws ecs update-service \
-            --cluster "$CLUSTER_NAME" \
-            --service "$SERVICE_NAME" \
-            --task-definition "$NEW_ARN" \
-            --force-new-deployment
-
-          echo "🎉 Deployment complete, service is rolling out $NEW_ARN"
+      - name: Push Docker image to ECR
+        run: |
+          docker push ${{ secrets.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
