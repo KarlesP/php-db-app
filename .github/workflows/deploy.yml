@@ -19,10 +19,7 @@ jobs:
           aws-region: ${{ secrets.AWS_REGION }}
 
       - name: List dirs 
-        run: |
-          ls
-          cd ${{ github.workspace }}
-          ls
+        run: ls ${{ github.workspace }}
           
       - name: Build Docker image
         run: |
