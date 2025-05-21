@@ -1,3 +1,5 @@
+USE mydb;
+
 CREATE TABLE test (
     id INT AUTO_INCREMENT PRIMARY KEY,
     value VARCHAR(255)
