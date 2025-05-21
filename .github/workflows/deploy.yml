@@ -18,10 +18,16 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-
+      - name: List dirs 
+        run: |
+          ls
+          cd ${{ github.workspace }}
+          ls
+          
       - name: Build Docker image
         run: |
-          cd {{ github.workspace }}
+          ls
+          cd ${{ github.workspace }}
           ls
           docker build -t ${{ secrets.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }} -f ${{ github.workspace }}/docker/php/Dockerfile ${{ github.workspace }}
 
