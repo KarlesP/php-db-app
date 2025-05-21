@@ -1,0 +1,292 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: "Optimized CloudFormation template for PHP ECS on Fargate with minimal RDS and AWS WAF protection"
+
+Parameters:
+  ApplicationName:
+    Type: String
+    Default: php-app
+  ECRRepoName:
+    Type: String
+    Default: php-app-repo
+  ImageTag:
+    Type: String
+    Default: latest
+  DesiredCount:
+    Type: Number
+    Default: 1
+  ContainerPort:
+    Type: Number
+    Default: 8080
+  HostPort:
+    Type: Number
+    Default: 8888
+  DBName:
+    Type: String
+    Default: mydb
+  DBUser:
+    Type: String
+    Default: admin
+  DBPassword:
+    Type: String
+    NoEcho: true
+  DBInstanceClass:
+    Type: String
+    Default: db.t3.micro
+  DBAllocatedStorage:
+    Type: Number
+    Default: 20
+  VpcCidr:
+    Type: String
+    Default: 10.0.0.0/16
+  PublicSubnet1Cidr:
+    Type: String
+    Default: 10.0.1.0/24
+  PublicSubnet2Cidr:
+    Type: String
+    Default: 10.0.2.0/24
+
+Resources:
+  # Networking (VPC, Subnets, IGW, Routes)
+  AppVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+  VPCGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref AppVPC
+      InternetGatewayId: !Ref InternetGateway
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref AppVPC
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref AppVPC
+      CidrBlock: !Ref PublicSubnet1Cidr
+      AvailabilityZone: us-east-1a
+      MapPublicIpOnLaunch: true
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref AppVPC
+      CidrBlock: !Ref PublicSubnet2Cidr
+      AvailabilityZone: us-east-1b
+      MapPublicIpOnLaunch: true
+  Subnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRouteTable
+  Subnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet2
+      RouteTableId: !Ref PublicRouteTable
+
+  # Security Groups
+  AlbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow HTTP ingress
+      VpcId: !Ref AppVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: !Ref HostPort
+          ToPort: !Ref HostPort
+          CidrIp: 0.0.0.0/0
+  AppSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow ALB to task
+      VpcId: !Ref AppVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: !Ref ContainerPort
+          ToPort: !Ref ContainerPort
+          SourceSecurityGroupId: !Ref AlbSecurityGroup
+  RDSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow app to RDS
+      VpcId: !Ref AppVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: !Ref AppSecurityGroup
+
+  # RDS MySQL (Free tier, minimal cost)
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Subnets for DB
+      SubnetIds: [!Ref PublicSubnet1, !Ref PublicSubnet2]
+  MySQLDatabase:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      Engine: mysql
+      EngineVersion: '8.0'
+      DBInstanceClass: !Ref DBInstanceClass
+      AllocatedStorage: !Ref DBAllocatedStorage
+      DBName: !Ref DBName
+      MasterUsername: !Ref DBUser
+      MasterUserPassword: !Ref DBPassword
+      VPCSecurityGroups: [!GetAtt RDSSecurityGroup.GroupId]
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      BackupRetentionPeriod: 0
+      PubliclyAccessible: false
+      DeletionProtection: false
+
+  # ECR Repository
+  AppECRRepo:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Ref ECRRepoName
+
+  # ECS Cluster & Task
+  AppCluster:
+    Type: AWS::ECS::Cluster
+  ECSTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ecs-tasks.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+  AppTaskDef:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub "${ApplicationName}-task"
+      Cpu: '256'
+      Memory: '512'
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      ExecutionRoleArn: !GetAtt ECSTaskExecutionRole.Arn
+      ContainerDefinitions:
+        - Name: php-app
+          Image: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ECRRepoName}:${ImageTag}"
+          PortMappings:
+            - ContainerPort: !Ref ContainerPort
+          Environment:
+            - Name: DB_HOST
+              Value: !GetAtt MySQLDatabase.Endpoint.Address
+            - Name: DB_PORT
+              Value: !GetAtt MySQLDatabase.Endpoint.Port
+            - Name: DB_NAME
+              Value: !Ref DBName
+            - Name: DB_USER
+              Value: !Ref DBUser
+            - Name: DB_PASS
+              Value: !Ref DBPassword
+          HealthCheck:
+            Command: ["CMD-SHELL", "curl -f http://localhost:${ContainerPort} || exit 1"]
+            Interval: 5
+            Timeout: 2
+            Retries: 10
+
+  # Application Load Balancer
+  AppALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Scheme: internet-facing
+      Subnets: [!Ref PublicSubnet1, !Ref PublicSubnet2]
+      SecurityGroups: [!Ref AlbSecurityGroup]
+
+  # AWS WAF WebACL for DDoS and XSS protection
+  WebACL:
+    Type: AWS::WAFv2::WebACL
+    Properties:
+      Name: !Sub "${ApplicationName}-webacl"
+      Scope: REGIONAL
+      DefaultAction:
+        Allow: {}
+      VisibilityConfig:
+        SampledRequestsEnabled: true
+        CloudWatchMetricsEnabled: true
+        MetricName: webacl
+      Rules:
+        - Name: RateLimitRule
+          Priority: 1
+          Action:
+            Block: {}
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: ratelimit
+          Statement:
+            RateBasedStatement:
+              Limit: 1000
+              AggregateKeyType: IP
+        - Name: AWSManagedRulesCommonRuleSet
+          Priority: 2
+          OverrideAction:
+            None: {}
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesCommonRuleSet
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: commonrules
+
+  WebACLAssociation:
+    Type: AWS::WAFv2::WebACLAssociation
+    Properties:
+      ResourceArn: !Ref AppALB
+      WebACLArn: !GetAtt WebACL.Arn
+
+  AppTG:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Port: !Ref HostPort
+      Protocol: HTTP
+      VpcId: !Ref AppVPC
+      TargetType: ip
+  AppListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref AppALB
+      Port: !Ref HostPort
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref AppTG
+
+  AppService:
+    Type: AWS::ECS::Service
+    Properties:
+      Cluster: !Ref AppCluster
+      DesiredCount: !Ref DesiredCount
+      LaunchType: FARGATE
+      TaskDefinition: !Ref AppTaskDef
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          Subnets: [!Ref PublicSubnet1, !Ref PublicSubnet2]
+          SecurityGroups: [!Ref AppSecurityGroup]
+      LoadBalancers:
+        - ContainerName: php-app
+          ContainerPort: !Ref ContainerPort
+          TargetGroupArn: !Ref AppTG
+
+Outputs:
+  LoadBalancerDNS:
+    Description: "Public DNS name of the ALB"
+    Value: !GetAtt AppALB.DNSName

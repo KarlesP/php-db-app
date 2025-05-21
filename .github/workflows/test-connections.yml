@@ -1,10 +1,11 @@
-name: Deploy to AWS
+name: Test to AWS ECR Connection
+
 
 on:
   workflow_dispatch:
 
 jobs:
-  deploy:
+  test-connection:
     runs-on: ubuntu-latest
     permissions:
       id-token: write     # needed for OIDC
@@ -22,3 +23,4 @@ jobs:
         run: |
           aws ecr get-login-password | docker login --username AWS \
             --password-stdin ${{ secrets.AWS_USER }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
+
